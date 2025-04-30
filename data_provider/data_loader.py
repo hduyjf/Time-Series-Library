@@ -50,41 +50,54 @@ class Dataset_ETT_hour(Dataset):
         self.scaler = StandardScaler()
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
-
+        #训练集测试集验证集的划分
         border1s = [0, 12 * 30 * 24 - self.seq_len, 12 * 30 * 24 + 4 * 30 * 24 - self.seq_len]
         border2s = [12 * 30 * 24, 12 * 30 * 24 + 4 * 30 * 24, 12 * 30 * 24 + 8 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
 
         if self.features == 'M' or self.features == 'MS':
+            #获取列名，从第一列开始
             cols_data = df_raw.columns[1:]
+            #获取这些列的数据
             df_data = df_raw[cols_data]
         elif self.features == 'S':
+            #获取指定列的数据“OT”
             df_data = df_raw[[self.target]]
 
         if self.scale:
+            #对训练数据进行归一化操作，开始边界为0，结束边界为12*30*24
             train_data = df_data[border1s[0]:border2s[0]]
             self.scaler.fit(train_data.values)
+            #对所有数据进行归一化，按照训练数据拟合的归一化统计规则
             data = self.scaler.transform(df_data.values)
         else:
             data = df_data.values
-
+        #获取当前（训练集或测试集或验证集）的时间维度
         df_stamp = df_raw[['date']][border1:border2]
         df_stamp['date'] = pd.to_datetime(df_stamp.date)
         if self.timeenc == 0:
+            #不对时间维进行编码，仅提取年月日等信息
             df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
             df_stamp['day'] = df_stamp.date.apply(lambda row: row.day, 1)
             df_stamp['weekday'] = df_stamp.date.apply(lambda row: row.weekday(), 1)
             df_stamp['hour'] = df_stamp.date.apply(lambda row: row.hour, 1)
             data_stamp = df_stamp.drop(['date'], 1).values
         elif self.timeenc == 1:
+            #对时间维进行编码，按照freq参数来，如1h，1m等，返回数据为
+            #  2024-04-01_00：12：00 2024-04-01_00：13：00 2024-04-01_00：14：00
+            #           t1                   s1                    u1
+            #           t2                   s2                    u2
+            #           t3                   s3                    u3
             data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
+            #将序列转换为：如2024-04-01_00：12：00 x y z转换为t1 t2 t3 x y z
             data_stamp = data_stamp.transpose(1, 0) 
 
         self.data_x = data[border1:border2]
         self.data_y = data[border1:border2]
 
         if self.set_type == 0 and self.args.augmentation_ratio > 0:
+            #对数据进行数据增强
             self.data_x, self.data_y, augmentation_tags = run_augmentation_single(self.data_x, self.data_y, self.args)
 
         self.data_stamp = data_stamp
@@ -94,18 +107,21 @@ class Dataset_ETT_hour(Dataset):
         s_end = s_begin + self.seq_len
         r_begin = s_end - self.label_len
         r_end = r_begin + self.label_len + self.pred_len
-
+        #输入序列
         seq_x = self.data_x[s_begin:s_end]
+        #目标序列，label_len作为上下文信息，从第一个预测点往前书label_len个，帮助模型了解最近的目标趋势,pred_len为预测序列
         seq_y = self.data_y[r_begin:r_end]
         seq_x_mark = self.data_stamp[s_begin:s_end]
         seq_y_mark = self.data_stamp[r_begin:r_end]
-
+        #返回输入序列，目标序列，输入时间特征序列，输入目标特征序列
         return seq_x, seq_y, seq_x_mark, seq_y_mark
 
     def __len__(self):
+        #返回有多少组样本数据。
         return len(self.data_x) - self.seq_len - self.pred_len + 1
 
     def inverse_transform(self, data):
+        #还原标准化后的数据
         return self.scaler.inverse_transform(data)
 
 
