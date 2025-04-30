@@ -114,6 +114,7 @@ class Dataset_ETT_hour(Dataset):
         seq_x_mark = self.data_stamp[s_begin:s_end]
         seq_y_mark = self.data_stamp[r_begin:r_end]
         #返回输入序列，目标序列，输入时间特征序列，输入目标特征序列
+        #返回数据格式[[4,4.1,4.2], [5,5.1,5,2], [6,6.1,6.2], [7,7.1,7.2]]
         return seq_x, seq_y, seq_x_mark, seq_y_mark
 
     def __len__(self):
@@ -322,7 +323,7 @@ class Dataset_Custom(Dataset):
     def inverse_transform(self, data):
         return self.scaler.inverse_transform(data)
 
-
+#M4属于单变量预测，不涉及多变量，因此整个的数据读取方式也不一样
 class Dataset_M4(Dataset):
     def __init__(self, args, root_path, flag='pred', size=None,
                  features='S', data_path='ETTh1.csv',
@@ -354,10 +355,13 @@ class Dataset_M4(Dataset):
             dataset = M4Dataset.load(training=True, dataset_file=self.root_path)
         else:
             dataset = M4Dataset.load(training=False, dataset_file=self.root_path)
+        #过滤依据M4-info的信息，过滤seasonal_patterns类的数据作为数据集，数据中特征为空的填充nan
         training_values = np.array(
             [v[~np.isnan(v)] for v in
              dataset.values[dataset.groups == self.seasonal_patterns]])  # split different frequencies
+        #获取序号
         self.ids = np.array([i for i in dataset.ids[dataset.groups == self.seasonal_patterns]])
+        #获取所有数据
         self.timeseries = [ts for ts in training_values]
 
     def __getitem__(self, index):
@@ -378,6 +382,7 @@ class Dataset_M4(Dataset):
                            max(0, cut_point - self.label_len):min(len(sampled_timeseries), cut_point + self.pred_len)]
         outsample[:len(outsample_window), 0] = outsample_window
         outsample_mask[:len(outsample_window), 0] = 1.0
+        #返回数据格式[[4], [5], [6], [7]]
         return insample, outsample, insample_mask, outsample_mask
 
     def __len__(self):
